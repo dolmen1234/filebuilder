@@ -42,7 +42,7 @@ public class FileBuilder {
     private static class ClassCode {
         private final String classFile;
 
-        /** class name */
+        /** class name or */
         private String className;
         private String keyword;
 
