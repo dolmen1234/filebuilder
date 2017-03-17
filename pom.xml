@@ -32,7 +32,12 @@
 							<mainClass>fr.dgigon.codg.filebuider.FileBuilder</mainClass>
 						</manifest>
 					</archive>
-				</configuration>
+					<excludes>
+						<exclude>**/grunt/*</exclude>
+						<exclude>**/gulp/*</exclude>
+					</excludes>
+ 					<finalName>filebuilder</finalName>
+ 				</configuration>
 			</plugin>
 		</plugins>
 	</build>

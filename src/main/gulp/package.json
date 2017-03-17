@@ -1,0 +1,9 @@
+{
+  "name": "filebuilder",
+  "version": "1.0.0",
+  "dependencies": {
+    "gulp": "*",
+    "gulp-util": "*",
+    "gulp-watch": "*"
+  }
+}
