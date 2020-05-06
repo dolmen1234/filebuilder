@@ -1,14 +1,20 @@
 package fr.dgigon.codg.filebuider;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.MalformedInputException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -27,7 +33,10 @@ import java.util.Set;
  * 
  * Example path : /src/builder/sample/Sample.java
  * 
+ * Repris & adapté de :
+ * 
  * @author Manwe
+ * 
  * 
  */
 public class FileBuilder {
@@ -37,87 +46,13 @@ public class FileBuilder {
     static {
         NO_PUBLIC_REMOVE.add("public String toString()");
         NO_PUBLIC_REMOVE.add("public boolean equals(");
-    }
-
-    private static class ClassCode {
-        private final String classFile;
-
-        /** class name or yes*/
-        private String className;
-        private String keyword;
-
-        private final List<String> beforeClassContent = new ArrayList<String>();
-        private final List<String> afterClassContent = new ArrayList<String>();
-
-        private boolean isAbstract;
-
-        ClassCode(String classFile) {
-            this.classFile = classFile;
-        }
-
-        public void declaration(String line, String keyword, boolean isAbstract) {
-            className = extractDeclaration(line, keyword);
-            this.keyword = keyword;
-            this.isAbstract = isAbstract;
-        }
-
-        public String className() {
-            return className;
-        }
-
-        public String declaration() {
-            return (isAbstract ? "static abstract " : "private static ") + keyword + className;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null) {
-                return false;
-            }
-            if (getClass() != obj.getClass()) {
-                return false;
-            }
-            final ClassCode other = (ClassCode) obj;
-            if (classFile == null) {
-                if (other.classFile != null) {
-                    return false;
-                }
-            } else if (!classFile.equals(other.classFile)) {
-                return false;
-            }
-            return true;
-        }
-
-        private String extractDeclaration(String line, String str) {
-            return line.substring(line.indexOf(str) + str.length()).replaceAll("\\{", "").trim();
-        }
-
-        @Override
-        public int hashCode() {
-            final int prime = 31;
-            int result = 1;
-            result = prime * result + ((classFile == null) ? 0 : classFile.hashCode());
-            return result;
-        }
-    }
-
-    public static void main(String[] args) throws IOException {
-        if (args.length != 2) {
-            System.err.println("Unexpected number of arguments");
-        } else {
-            final FileBuilder builder = new FileBuilder();
-            File rootDir = new File(args[0]).getParentFile();
-            while (!rootDir.getName().equals("java")) {
-                rootDir = rootDir.getParentFile();
-            }
-
-            final ClassCode treated = builder.processFile(args[0], rootDir.getAbsolutePath());
-            builder.write(treated, args[1]);
-            System.out.println("Fin du traitement");
-        }
+        NO_PUBLIC_REMOVE.add("static void main(");
+        NO_PUBLIC_REMOVE.add("public int compare(");
+        NO_PUBLIC_REMOVE.add("public boolean hasNext()");
+        NO_PUBLIC_REMOVE.add("public String next()");
+        NO_PUBLIC_REMOVE.add("public int nextInt()");
+        NO_PUBLIC_REMOVE.add("public String nextLine()");
+        NO_PUBLIC_REMOVE.add("public void println(String str)");
     }
 
     private static final Charset CHARSET = Charset.forName("UTF-8");
@@ -130,7 +65,50 @@ public class FileBuilder {
     private FileBuilder() {
     }
 
+    public static void main(String[] args) throws IOException, InterruptedException {
+        if (args.length != 2) {
+            System.err.println("Unexpected number of arguments : " +
+                    args.length + ", expected 2 : main source file, dest dir");
+        } else {
+            watchAndBundle(args[0], args[1]);
+        }
+    }
+
+    public static void bundle(File srcDir, File destDir) throws InterruptedException, IOException {
+        bundle(srcDir.getAbsolutePath(), destDir.getAbsolutePath());
+    }
+
+    public static void bundle(String srcDir, String destDir) throws InterruptedException, IOException {
+        final FileBuilder builder = new FileBuilder();
+        final ClassCode treated = builder.processFile(srcDir, destDir);
+        builder.write(treated, destDir);
+        System.out.println(new Date().toString() + " : " + srcDir + " -> " + destDir);
+    }
+
+    public static void watchAndBundle(String srcDir, String destDir) throws InterruptedException, IOException {
+        File rootDir = new File(srcDir).getParentFile();
+        if (rootDir == null) {
+            throw new IllegalArgumentException("pas de parent pour " + srcDir);
+        }
+        while (!rootDir.getName().equals("java")) {
+            rootDir = rootDir.getParentFile();
+        }
+
+        Watcher watcher = new Watcher(rootDir);
+        System.err.println("Start watch " + rootDir.getAbsolutePath());
+        List<String> exludeDirNames = Collections.singletonList("test");
+        while (true) {
+            if (watcher.needBundle(exludeDirNames)) {
+                bundle(srcDir, rootDir.getAbsolutePath());
+            }
+            Thread.sleep(2000);
+        }
+    }
+
     private String importToPath(String importStr, String baseDir) {
+        if (importStr.indexOf("java") != -1) {
+            return importStr; 
+        }
         final String className = importStr.substring(7).replaceAll(";", "");
 
         return toAbsolutePath(baseDir + "\\" + className.replaceAll("\\.", "/") + ".java");
@@ -138,19 +116,27 @@ public class FileBuilder {
 
     private ClassCode processFile(String fileName, String baseDir) throws IOException {
         knownFiles.add(toAbsolutePath(fileName));
-        final List<String> fileContent = readFile(fileName);
+        final List<String> fileContent = readFile(new File(fileName));
         final ClassCode code = readFileContent(fileName, fileContent, baseDir);
         readPackageClasses(fileName, baseDir);
         return code;
     }
 
-    private List<String> readFile(String fileName) throws IOException {
-        try {
-            return Files.readAllLines(Paths.get(fileName), CHARSET);
+    private List<String> readFile(File src) throws IOException {
+        List<String> lines = new ArrayList<>();
+        try (BufferedReader buffRead = new BufferedReader(new InputStreamReader(new FileInputStream(src)))) {
+            String line;
+            while ((line = buffRead.readLine()) != null) {
+                lines.add(line);
+            }
         } catch (MalformedInputException excp) {
-            System.err.println("Impossible de lire le fichier " + fileName);
+            System.err.println("Impossible de lire le fichier " + src.getAbsolutePath());
+            throw new IOException(excp);
+        } catch (AccessDeniedException excp) {
+            System.err.println("Pas le droit de lire le fichier " + src.getAbsolutePath());
             throw new IOException(excp);
         }
+        return lines;
     }
 
     private ClassCode readFileContent(String fileName, List<String> fileContent, String baseDir) throws IOException {
@@ -203,19 +189,18 @@ public class FileBuilder {
 
         clean = concat;
         for (String str : new String[] { "{", "}", "=", "(", ")", ",", "-", "+", "*", "/", ";", "<", ">", "?", ":", }) {
-            clean = clean.replaceAll(" \\" + str, str).
-                    replaceAll("\\" + str + " ", str);
+            clean = clean.replaceAll(" \\" + str, str).replaceAll("\\" + str + " ", str);
         }
         return clean;
     }
 
     private boolean canPublicRemove(String concat, String previousLine) {
-        if (previousLine.indexOf("@Override") != -1) {
+        if (previousLine.contains("@Override")) {
             return false;
         }
 
         for (String noPublic : NO_PUBLIC_REMOVE) {
-            if (concat.indexOf(noPublic) != -1) {
+            if (concat.contains(noPublic)) {
                 return false;
             }
         }
@@ -230,10 +215,9 @@ public class FileBuilder {
         } else if (line.startsWith("import ")) {
             final String importedClassPath = importToPath(line, baseDir);
             if (!knownFiles.contains(importedClassPath)) {
-                if (Files.exists(Paths.get(toAbsolutePath(importedClassPath)))) {
+                if (importedClassPath.indexOf('*') == -1 && Files.exists(Paths.get(toAbsolutePath(importedClassPath)))) {
                     innerClasses.put(importedClassPath, processFile(importedClassPath, baseDir));
-                }
-                else {
+                } else {
                     imports.add(line);
                 }
             }
@@ -311,7 +295,7 @@ public class FileBuilder {
         }
 
         for (int i = lines.size() - 1; i > 0; i--) {
-            if (lines.get(i).replace('}', ' ').trim().isEmpty() && lines.get(i - 1).indexOf("//") == -1) {
+            if (lines.get(i).replace('}', ' ').trim().isEmpty() && !lines.get(i - 1).contains("//")) {
                 lines.set(i - 1, lines.get(i - 1) + lines.get(i));
                 lines.remove(i);
             }
