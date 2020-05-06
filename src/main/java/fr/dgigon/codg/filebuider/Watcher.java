@@ -48,11 +48,23 @@ public class Watcher {
         return 0L;
     }
 
+    /**
+     * 
+     * @return true si un des fichiers *.java dans l'arborescence a changé
+     */
+    public boolean needBundle() {
+        return needBundle(Collections.emptyList());
+    }
+
+    /**
+     * 
+     * @param exludeDirNames on ne scanne pas les répertoires qui ont ces noms
+     * @return true si un des fichiers *.java dans l'arborescence a changé
+     */
     public boolean needBundle(List<String> exludeDirNames) {
         files.clear();
         long lastM = lastModified(baseDir, exludeDirNames);
         if (lastM > lastBundle) {
-            System.err.println("Last modified : " + files.get(lastM));
             return true;
         }
         return false;

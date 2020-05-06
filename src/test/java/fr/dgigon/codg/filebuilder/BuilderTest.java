@@ -18,6 +18,7 @@ public class BuilderTest {
         System.err.println(srcDir.getAbsolutePath());
         FileBuilder.bundle(srcDir, destDir);
         Assert.assertTrue(new File(destDir, "Player.java").exists());
+//        FileBuilder.watchAndBundle(srcDir.getAbsolutePath(), destDir.getAbsolutePath());
     }
     
 }

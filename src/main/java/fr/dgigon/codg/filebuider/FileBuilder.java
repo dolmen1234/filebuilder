@@ -86,13 +86,8 @@ public class FileBuilder {
     }
 
     public static void watchAndBundle(String srcDir, String destDir) throws InterruptedException, IOException {
-        File rootDir = new File(srcDir).getParentFile();
-        if (rootDir == null) {
-            throw new IllegalArgumentException("pas de parent pour " + srcDir);
-        }
-        while (!rootDir.getName().equals("java")) {
-            rootDir = rootDir.getParentFile();
-        }
+        File src = new File(srcDir);
+        File rootDir = src.isDirectory() ? src : src.getParentFile();
 
         Watcher watcher = new Watcher(rootDir);
         System.err.println("Start watch " + rootDir.getAbsolutePath());
@@ -100,6 +95,7 @@ public class FileBuilder {
         while (true) {
             if (watcher.needBundle(exludeDirNames)) {
                 bundle(srcDir, rootDir.getAbsolutePath());
+                watcher.notifyBundle();
             }
             Thread.sleep(2000);
         }
