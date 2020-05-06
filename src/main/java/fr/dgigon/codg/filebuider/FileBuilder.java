@@ -12,6 +12,8 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -42,6 +44,8 @@ import java.util.Set;
 public class FileBuilder {
     private static final String END_COMMENT = "*/";
 
+    private static final DateFormat HOUR_FORMAT = new SimpleDateFormat("HH:mm:ss");
+    
     private static final List<String> NO_PUBLIC_REMOVE = new ArrayList<String>();
     static {
         NO_PUBLIC_REMOVE.add("public String toString()");
@@ -78,11 +82,11 @@ public class FileBuilder {
         bundle(srcDir.getAbsolutePath(), destDir.getAbsolutePath());
     }
 
-    public static void bundle(String srcDir, String destDir) throws InterruptedException, IOException {
+    public static void bundle(String srcMainFile, String destDir) throws InterruptedException, IOException {
         final FileBuilder builder = new FileBuilder();
-        final ClassCode treated = builder.processFile(srcDir, destDir);
+        final ClassCode treated = builder.processFile(srcMainFile, destDir);
         builder.write(treated, destDir);
-        System.out.println(new Date().toString() + " : " + srcDir + " -> " + destDir);
+        System.out.println(HOUR_FORMAT.format(new Date()) + " : " + srcMainFile + " -> " + destDir);
     }
 
     public static void watchAndBundle(String srcDir, String destDir) throws InterruptedException, IOException {
@@ -94,7 +98,7 @@ public class FileBuilder {
         List<String> exludeDirNames = Collections.singletonList("test");
         while (true) {
             if (watcher.needBundle(exludeDirNames)) {
-                bundle(srcDir, rootDir.getAbsolutePath());
+                bundle(srcDir, destDir);
                 watcher.notifyBundle();
             }
             Thread.sleep(2000);
