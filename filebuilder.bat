@@ -1,0 +1,1 @@
+D:\tools\java\jdk-11.0.4.11-openj9\bin\java -jar target/filebuilder.jar D:\workspaces\java-2019-06\contest\src\main\java D:\workspaces\cdg2\sync\Player.java 
